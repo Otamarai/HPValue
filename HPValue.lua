@@ -1,7 +1,6 @@
 _addon.name = 'HPValue'
 _addon.author = 'Otamarai'
 _addon.version = '0.1'
-_addon.commands = {'hp'}
 
 require('sets')
 require('functions')
@@ -148,15 +147,6 @@ windower.register_event('prerender', function()
 		end
 	end
 	
-end)
-
-
-windower.register_event('addon command', function(...)
-	local command = {...}
-	local mob = windower.ffxi.get_mob_by_target('st') or windower.ffxi.get_mob_by_target('t')
-	if command[1] == 'test' then
-		windower.add_to_chat(7, windower.ffxi.get_mob_by_target('t').id)
-	end
 end)
 
 
