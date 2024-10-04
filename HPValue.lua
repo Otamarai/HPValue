@@ -11,7 +11,7 @@ spellTable = require('SpellTable')
 
 areaMobs = {}
 delay = 0.2
-scanDelay = 3
+scanDelay = 6
 scanTime = 0
 nextTime = os.clock()
 
