@@ -7,15 +7,14 @@ require('functions')
 texts = require('texts')
 packets = require('packets')
 zones = require('resources').zones
-spellTable = require('SpellTable')
 
-areaMobs = {}
+areamobs = {}
 delay = 0.2
-scanDelay = 6
-scanTime = 0
+scanDelay = 3
 nextTime = os.clock()
 
 
+--Pulled from TParty
 hp = texts.new('${HPC|100}/${HPT|100}', {
     pos = {
         x = -76,
@@ -79,67 +78,52 @@ windower.register_event('prerender', function()
 		nextTime = curTime
 		delay = 0.2
 		for i, v in pairs(windower.ffxi.get_mob_array()) do
-			local findLevel = false
-			if not areaMobs[v.name] then
-				areaMobs[v.name] = {}
-			end
-			if not areaMobs[v.id] then
-				areaMobs[v.id] = {}
-			end
-			if areaMobs[v.id] and (not areaMobs[v.id].CurrentLevel or areaMobs[v.id].CurrentLevel == 0) and windower.ffxi.get_mob_by_id(v.id) and windower.ffxi.get_mob_by_id(v.id).valid_target and windower.ffxi.get_mob_by_id(v.id).spawn_type == 16 and scanTime + scanDelay <= curTime and not invalidZones:contains(zones[info.zone].en) then
-				packet = packets.new('outgoing', 0x0F4, {--Widescan
-					['Flags'] = 1,
-					['_unknown1'] = 0,
-					['_unknown2'] = 0,
-				})
-				packets.inject(packet)
-				if mob and mob.id == v.id then
-					hp:hide()
+			if mob and areamobs[v.id] and (v.hpp == 0 or v.status > 1) then
+				if areamobs[v.id].HPP ~= 100 then
+					areamobs[v.id].HPP = 100
+					areamobs[v.id].DT = 0
+					areamobs[v.id].HPC = 0
 				end
-				scanTime = os.clock()
-				return
-			end
-			if areaMobs[v.id] and areaMobs[v.id].CurrentLevel and areaMobs[v.id].CurrentLevel ~= 0 then
-				if not areaMobs[v.id].DT then
-					areaMobs[v.id].DT = 0
+			elseif not mob and areamobs[v.id] and (v.hpp == 0 or v.status > 1) then
+				if areamobs[v.id].HPC ~= nil then
+					areamobs[v.id].HPP = 100
+					areamobs[v.id].DT = 0
+					areamobs[v.id].HPT = nil
+					areamobs[v.id].HPC = nil
 				end
-				if not areaMobs[v.id].HPP then
-					areaMobs[v.id].HPP = v.hpp
+			elseif v.valid_target and checkIDInParty(v.claim_id) and v.is_npc and v.status == 1 and v.spawn_type == 16 then
+				if not areamobs[v.id] then
+					areamobs[v.id] = {}
+					areamobs[v.id].DT = 0
+					areamobs[v.id].HPP = v.hpp
 				end
-				if mob and mob.id == v.id and (v.hpp == 0 or v.status > 1) then
-					areaMobs[v.id].HPP = 100
-					areaMobs[v.id].DT = 0
-					areaMobs[v.id].HPC = 0
-				elseif not mob and (v.hpp == 0 or v.status > 1) then
-					areaMobs[v.id].HPP = 100
-					areaMobs[v.id].DT = 0
-					areaMobs[v.id].HPC = areaMobs[v.id].HPT
-				elseif v.valid_target and checkIDInParty(v.claim_id) and v.is_npc and v.status == 1 and v.spawn_type == 16 then
-					if v.hpp == 100 then
-						areaMobs[v.id].HPP = 100
-						areaMobs[v.id].DT = 0
-					end
-					if v.hpp ~= 100 and areaMobs[v.id].DT ~= 0 and areaMobs[v.id].HPP ~= v.hpp then
-						areaMobs[v.id].HPP = v.hpp
-						areaMobs[v.id].HPT = math.floor((areaMobs[v.id].DT)/((100-v.hpp)/100))
-						areaMobs[v.id].HPC = math.floor(areaMobs[v.id].HPT*((v.hpp)/100))
-						areaMobs[v.name].LevelInfo[areaMobs[v.id].CurrentLevel].HPT = areaMobs[v.id].HPT
-					end
+				
+				if areamobs[v.id] and v.hpp == 100 then
+					areamobs[v.id].HPP = v.hpp
+					areamobs[v.id].DT = 0
+					areamobs[v.id].HPT = nil
+					areamobs[v.id].HPC = nil
+				end
+				if v.hpp ~= 100 and areamobs[v.id].DT ~= 0 and areamobs[v.id].HPP ~= v.hpp then
+					areamobs[v.id].HPP = v.hpp
+					areamobs[v.id].HPT = math.floor((areamobs[v.id].DT)/((100-v.hpp)/100))
+					areamobs[v.id].HPC = math.floor(areamobs[v.id].HPT*((v.hpp)/100))
 				end
 			end
+			
 		end
-		--If we're targetting an actual mob
-		if mob and mob.spawn_type == 16 then
+		if mob then
 			local party_info = windower.ffxi.get_party_info()
 			-- Adjust position for party member count
 			hp:pos_y(hp_y_pos[party_info.party1_count])
-			if areaMobs[mob.id] and areaMobs[mob.id].CurrentLevel and areaMobs[mob.id].CurrentLevel ~= 0 and areaMobs[mob.name].LevelInfo[areaMobs[mob.id].CurrentLevel].HPT  then
-				local getHPT = areaMobs[mob.name].LevelInfo[areaMobs[mob.id].CurrentLevel].HPT
-				hp.HPT = getHPT
-				hp.HPC = math.floor(getHPT*((mob.hpp)/100))
-			else
+			if not areamobs[mob.id] then
 				hp.HPC = mob.hpp
 				hp.HPT = nil
+			elseif areamobs[mob.id] and areamobs[mob.id].DT == 0 and mob.hpp > 0 then
+				hp.HPC = mob.hpp
+				hp.HPT = nil
+			else
+				hp:update(areamobs[mob.id])
 			end
 			hp:show()
 		else
@@ -149,39 +133,30 @@ windower.register_event('prerender', function()
 	
 end)
 
-
-
 --Record the damage on our target
 windower.register_event('action', function(act)
 	local player = windower.ffxi.get_player()
-	if act.targets[1] and act.targets[1].id and act.targets[1].id ~= player.id and not checkIDInParty(act.targets[1].id) and (checkIDInParty(windower.ffxi.get_mob_by_id(act.targets[1].id).claim_id) or checkIDInParty(act.actor_id)) then
+	if act.targets[1] and act.targets[1].id and act.targets[1].id ~= player.id and (checkIDInParty(windower.ffxi.get_mob_by_id(act.targets[1].id).claim_id) or checkIDInParty(act.actor_id)) then
 		if act.category == 1 or act.category == 2 or act.category == 3 or act.category == 4 or act.category == 6 then
 			local damageTaken = 0
 			for i = 1, #act.targets[1].actions do
 				damageTaken = damageTaken + act.targets[1].actions[i].param
 				if category == 3 and act.targets[1].actions[1].add_effect_param and act.targets[1].actions[1].add_effect_param > 0 then
-					damageTaken = act.targets[1].actions[i].add_effect_param
+				damageTaken = act.targets[1].actions[i].add_effect_param
 				end
 			end
-
+			if not areamobs[act.targets[1].id] then
+				areamobs[act.targets[1].id] = {}
+				areamobs[act.targets[1].id].DT = 0
+			end
 			--Check to see if the mob is actually dead
-			local checkDMG = areaMobs[act.targets[1].id].DT + damageTaken
-			if areaMobs[act.targets[1].id].HPT and areaMobs[act.targets[1].id].HPT < checkDMG then
-				areaMobs[act.targets[1].id].DT = areaMobs[act.targets[1].id].DT + areaMobs[act.targets[1].id].HPC
+			local checkDMG = areamobs[act.targets[1].id].DT + damageTaken
+			if areamobs[act.targets[1].id].HPT and areamobs[act.targets[1].id].HPT < checkDMG then
+				areamobs[act.targets[1].id].DT = areamobs[act.targets[1].id].DT + areamobs[act.targets[1].id].HPC
 			else
-				areaMobs[act.targets[1].id].DT = checkDMG
+				areamobs[act.targets[1].id].DT = checkDMG
 			end
 			
-		end
-	elseif act.actor_id and checkIDInParty(windower.ffxi.get_mob_by_id(act.actor_id).claim_id) and windower.ffxi.get_mob_by_id(act.actor_id).spawn_type == 16 then
-		if act.category == 4 and spellTable['Heals']:contains(tostring(act.param)) then
-			local healingTaken = 0
-			healingTaken = healingTaken + act.targets[1].actions[1].param
-			areaMobs[act.actor_id].DT = areaMobs[act.actor_id].DT - healingTaken
-		elseif act.category == 11 and spellTable['TPMoves']:contains(tostring(act.param)) then
-			local healingTaken = 0
-			healingTaken = healingTaken + act.targets[1].actions[1].param
-			areaMobs[act.actor_id].DT = areaMobs[act.actor_id].DT - healingTaken
 		end
 	end
 end)
@@ -189,33 +164,23 @@ end)
 
 --Wipe the mob list on zone change to prevent any eventual lag
 windower.register_event('zone change', function(new, old)
-	areaMobs = {}
+	areamobs = {}
 end)
 
 
-
+--[[
 windower.register_event('incoming chunk', function(id, original, modified, injected, blocked)
     --Widescan
 	if id == 0x0F4 then
         local packet = packets.parse('incoming', original)
         local mob = windower.ffxi.get_mob_by_index(packet['Index'])
-		if mob then
-			if not areaMobs[mob.name] then
-				areaMobs[mob.name] = {}
-			end
-			if not areaMobs[mob.name].LevelInfo then
-				areaMobs[mob.name].LevelInfo = {}
-			end
-			areaMobs[mob.id].CurrentLevel = tonumber(packet['Level'])
-			local findLevel = areaMobs[mob.name].LevelInfo[tonumber(packet['Level'])]
-			if not findLevel then
-				areaMobs[mob.name].LevelInfo[tonumber(packet['Level'])] = {}
-			end
+		if mob and areamobs[mob.id] then
+			areamobs[mob.id].CurrentLevel = packet['Level']
 		end
     end
 end)
 
-
+]]
 
 
 
